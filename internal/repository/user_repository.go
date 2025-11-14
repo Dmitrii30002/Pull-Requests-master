@@ -22,8 +22,9 @@ type userRepo struct {
 
 func (r *userRepo) Post(user *domain.User) (*domain.User, error) {
 	ctx := context.Background()
-	exists, err := r.checkUserExist(ctx, user.ID)
+	exists, err := checkUserExist(ctx, r.db, user.ID)
 	if err != nil {
+		r.log.Debugf("failed to check exist %v", err)
 		return nil, err
 	}
 	if !exists {
@@ -61,8 +62,9 @@ func (r *userRepo) Post(user *domain.User) (*domain.User, error) {
 
 func (r *userRepo) SetUserActive(id string, status bool) (*domain.User, error) {
 	ctx := context.Background()
-	exists, err := r.checkUserExist(ctx, id)
+	exists, err := checkUserExist(ctx, r.db, id)
 	if err != nil {
+		r.log.Debugf("failed to check exist %v", err)
 		return nil, err
 	}
 	if !exists {
@@ -91,8 +93,9 @@ func (r *userRepo) SetUserActive(id string, status bool) (*domain.User, error) {
 
 func (r *userRepo) GetReview(id string) ([]*domain.PullRequestShort, error) {
 	ctx := context.Background()
-	exists, err := r.checkUserExist(ctx, id)
+	exists, err := checkUserExist(ctx, r.db, id)
 	if err != nil {
+		r.log.Debugf("failed to check exist %v", err)
 		return nil, err
 	}
 	if !exists {
@@ -131,15 +134,14 @@ func (r *userRepo) GetReview(id string) ([]*domain.PullRequestShort, error) {
 	return pullRequests, nil
 }
 
-func (r *userRepo) checkUserExist(ctx context.Context, id string) (bool, error) {
+func checkUserExist(ctx context.Context, db *sql.DB, id string) (bool, error) {
 	var exists bool
 	query := `
 		SELECT EXISTS(SELECT 1 FROM users 
 		WHERE id = $1)
 	`
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&exists)
+	err := db.QueryRowContext(ctx, query, id).Scan(&exists)
 	if err != nil {
-		r.log.Debugf("failed to check exist %v", err)
 		return exists, err
 	}
 	return exists, nil
