@@ -12,7 +12,7 @@ type PullRequestRepository interface {
 	Reassign(id string, oldRevID string) (*domain.PullRequest, error)
 }
 
-type PullRequestRepo struct {
+type pullRequestRepo struct {
 	db  *sql.DB
 	log *logger.Logger
 }

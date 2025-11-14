@@ -1,6 +1,7 @@
 package main
 
 import (
+	"Pull-Requests-master/internal/migration"
 	"Pull-Requests-master/package/config"
 	"Pull-Requests-master/package/database"
 	"Pull-Requests-master/package/logger"
@@ -30,7 +31,13 @@ func main() {
 	fmt.Println(db, log)
 	fmt.Print("Hallo world")
 
-	//TODO 4.1: Реализация репозеториев и бизнес-логики
+	err = migration.Migrate(db, "migrations")
+	if err != nil {
+		log.Fatalf("migration failed: %v", err)
+	}
+	log.Info("migration completed")
+
+	//TODO 4.1: Реализация репозеториев и бизнес-логики!!!! Самый главный этап
 	//TODO 4.2: Расписать ошибки
 
 	//TODO 5: Реализация хендлеров
