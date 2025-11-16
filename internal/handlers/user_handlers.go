@@ -23,6 +23,16 @@ func (h *Handler) SetUserActive(c echo.Context) error {
 		})
 	}
 
+	if req.UserID == "" {
+		h.log.Debug("invalid data")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": map[string]string{
+				"code":    "BAD_REQUEST",
+				"message": "invalid data",
+			},
+		})
+	}
+
 	user, err := h.s.SetUserActive(req.UserID, req.IsActive)
 	if err != nil {
 		switch err {
