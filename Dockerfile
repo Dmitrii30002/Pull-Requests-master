@@ -1,12 +1,24 @@
+# Build stage
+FROM golang:1.25-alpine AS builder
 
-FROM golang:1.22
+WORKDIR /app
 
-WORKDIR ${GOPATH}/avito-shop/
-COPY . ${GOPATH}/avito-shop/
+COPY go.mod go.sum ./
+RUN go mod download
 
-RUN go build -o /build ./internal/cmd \
-    && go clean -cache -modcache
+COPY . .
+
+RUN  go build cmd/main.go
+
+# Runtime stage  
+FROM alpine:latest
+
+COPY --from=builder /app .
+
+COPY migrations /app/migrations
+
+COPY config.yaml .
 
 EXPOSE 8080
 
-CMD ["/build"]
+CMD ["./main"]

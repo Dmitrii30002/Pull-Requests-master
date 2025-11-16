@@ -12,13 +12,6 @@ import (
 )
 
 func main() {
-
-	//Временное
-	/*err := setEnv()
-	if err != nil {
-		fmt.Printf("failed to set env: %v", err)
-	}*/
-
 	config, err := config.GetConfig()
 	if err != nil {
 		fmt.Printf("Config wasn't created %v", err)
@@ -68,19 +61,5 @@ func main() {
 	}
 	e.Start(":8080")
 
-	//TODO 6: Докер образ + докер композе +
-
-	//TODO 7: Юнит тесты + моки
-
 	//TODO 10: Допы - под сомнением
 }
-
-/*func setEnv() error {
-	err := os.Setenv("DB_HOST", "localhost")
-	err = os.Setenv("DB_PORT", "5432")
-	err = os.Setenv("DB_NAME", "postgres")
-	err = os.Setenv("DB_USER", "postgres")
-	err = os.Setenv("DB_PASSWORD", "dima15")
-	err = os.Setenv("DB_SSLMODE", "disable")
-	return err
-}*/

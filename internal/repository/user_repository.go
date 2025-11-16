@@ -60,38 +60,39 @@ func (r *userRepo) Create(user *domain.User) (*domain.User, error) {
 
 func (r *userRepo) Update(user *domain.User) (*domain.User, error) {
 	ctx := context.Background()
-	var newUser domain.User
 	query := `
-			UPDATE users 
-			SET
-				username = $1,
-				is_active = $2,
-				team_name = $3
-			WHERE id = $4
-			RETURNING (id, username, is_active, team_name)
-		`
-	_, err := r.db.ExecContext(ctx, query,
+        UPDATE users 
+        SET
+            username = $1,
+            is_active = $2,
+            team_name = $3
+        WHERE id = $4
+        RETURNING id, username, is_active, team_name
+    `
+
+	var updatedUser domain.User
+	err := r.db.QueryRowContext(ctx, query,
 		user.Username, user.IsActive, user.TeamName, user.ID,
-	)
+	).Scan(&updatedUser.ID, &updatedUser.Username, &updatedUser.IsActive, &updatedUser.TeamName)
+
 	if err != nil {
-		r.log.Errorf("failed to exec queryr %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err
 	}
 
-	return &newUser, nil
+	return &updatedUser, nil
 }
-
 func (r *userRepo) SetUserActive(id string, status bool) (*domain.User, error) {
 	ctx := context.Background()
 	query := `
 		UPDATE users
 		SET
-			is_active = $2
-		WHERE id = $1
+			is_active = $1
+		WHERE id = $2
 		RETURNING id, username, is_active, team_name
 	`
 	var user domain.User
-	err := r.db.QueryRowContext(ctx, query, id, status).Scan(&user.ID, &user.Username, &user.IsActive, &user.TeamName)
+	err := r.db.QueryRowContext(ctx, query, status, id).Scan(&user.ID, &user.Username, &user.IsActive, &user.TeamName)
 	if err != nil {
 		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err

@@ -36,6 +36,16 @@ func (h *Handler) CreatePR(c echo.Context) error {
 		})
 	}
 
+	if pr.ID == "" || pr.Status == "" {
+		h.log.Debug("invalid data")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": map[string]string{
+				"code":    "BAD_REQUEST",
+				"message": "invalid data",
+			},
+		})
+	}
+
 	newPR, err := h.s.CreatePR(&pr)
 	if err != nil {
 		switch err {
@@ -75,6 +85,16 @@ func (h *Handler) MergePR(c echo.Context) error {
 		})
 	}
 
+	if req.PRID == "" {
+		h.log.Debug("invalid data")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": map[string]string{
+				"code":    "BAD_REQUEST",
+				"message": "invalid data",
+			},
+		})
+	}
+
 	pr, err := h.s.MergePR(req.PRID)
 	if err != nil {
 		switch err {
@@ -106,6 +126,16 @@ func (h *Handler) ReassignReviewersPR(c echo.Context) error {
 			"error": map[string]string{
 				"code":    "BAD_REQUEST",
 				"message": "Invalid JSON",
+			},
+		})
+	}
+
+	if req.PRID == "" || req.OldRev == "" {
+		h.log.Debug("invalid data")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": map[string]string{
+				"code":    "BAD_REQUEST",
+				"message": "invalid data",
 			},
 		})
 	}

@@ -21,6 +21,16 @@ func (h *Handler) AddTeam(c echo.Context) error {
 		})
 	}
 
+	if team.Name == "" {
+		h.log.Debug("invalid data")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": map[string]string{
+				"code":    "BAD_REQUEST",
+				"message": "invalid data",
+			},
+		})
+	}
+
 	newTeam, err := h.s.CreateTeam(&team)
 	if err != nil {
 		switch err {
@@ -40,6 +50,16 @@ func (h *Handler) AddTeam(c echo.Context) error {
 
 func (h *Handler) GetTeam(c echo.Context) error {
 	teamName := c.QueryParam("team_name")
+
+	if teamName == "" {
+		h.log.Debug("invalid data")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": map[string]string{
+				"code":    "BAD_REQUEST",
+				"message": "invalid data",
+			},
+		})
+	}
 
 	team, err := h.s.GetTeamByName(teamName)
 	if err != nil {
