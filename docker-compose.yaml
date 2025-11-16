@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: go-postgres-db
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - go-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d myapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   pr_service:
       build: .
       container_name: go-app
@@ -18,23 +35,6 @@ services:
           condition: service_healthy
       networks:
       - go-network
-  
-  db:
-    image: postgres:15-alpine
-    container_name: go-postgres-db
-    environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    networks:
-      - go-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser -d myapp"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 networks:
   go-network:

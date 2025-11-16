@@ -1,0 +1,14 @@
+APP_NAME=myapp
+BINARY_NAME=main
+DOCKER_IMAGE=app
+GO_VERSION=1.25
+
+test:
+	go test -v ./...
+
+
+docker-up:
+	docker-compose up
+
+docker-down:
+	docker-compose down
