@@ -6,7 +6,6 @@ import (
 	"Pull-Requests-master/package/logger"
 	"context"
 	"database/sql"
-	"fmt"
 )
 
 type PullRequestRepository interface {
@@ -16,6 +15,7 @@ type PullRequestRepository interface {
 	GetByID(id string) (*domain.PullRequest, error)
 	GetReviewrs(id string) ([]string, error)
 	RemoveReviewer(id string, revID string) error
+	CheckPRExist(id string) (bool, error)
 }
 
 type pullRequestRepo struct {
@@ -23,21 +23,12 @@ type pullRequestRepo struct {
 	log *logger.Logger
 }
 
+func NewPullRequestRepository(db *sql.DB, log *logger.Logger) PullRequestRepository {
+	return &pullRequestRepo{db: db, log: log}
+}
+
 func (r *pullRequestRepo) Create(pr *domain.PullRequestShort) (*domain.PullRequest, error) {
 	ctx := context.Background()
-	exists, err := r.checkPRExist(ctx, pr.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if exists {
-		r.log.Debugf("pull request with id: %s exist", pr.ID)
-		err = myErrors.ErrorResponse{
-			Code:    "PR_EXISTS",
-			Message: fmt.Sprintf("pull request with id: %s exist", pr.ID)}
-		return nil, err
-	}
-
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		r.log.Debugf("failed to start transaction: %v", err)
@@ -123,28 +114,16 @@ func (r *pullRequestRepo) Create(pr *domain.PullRequestShort) (*domain.PullReque
 
 func (r *pullRequestRepo) Merge(id string) (*domain.PullRequest, error) {
 	ctx := context.Background()
-	exists, err := r.checkPRExist(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if !exists {
-		r.log.Debugf("pull request with id: %s doesn't exist", id)
-		err = myErrors.ErrorResponse{
-			Code:    "PR_EXISTS",
-			Message: fmt.Sprintf("pull request with id: %s exist", id)}
-		return nil, err
-	}
-
 	query := `
 		UPDATE pull_requests
 		SET
-			status = 'MERGED'
+			status = 'MERGED',
+			merged_at: 'CURRENT_TIMESTAMP'
 		WHERE id = $1
 		RETURNING (id, name, author_id, status, merged_at)
 	`
 	newPR := domain.PullRequest{AssignedReviewers: []string{}}
-	err = r.db.QueryRowContext(ctx, query, id).Scan(&newPR.ID, &newPR.Name, &newPR.AuthorID, &newPR.Status, &newPR.MergedAt)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&newPR.ID, &newPR.Name, &newPR.AuthorID, &newPR.Status, &newPR.MergedAt)
 	if err != nil {
 		r.log.Debugf("failed to exec query: %v", err)
 		return nil, err
@@ -155,19 +134,6 @@ func (r *pullRequestRepo) Merge(id string) (*domain.PullRequest, error) {
 
 func (r *pullRequestRepo) Reassign(id string, oldRevID string) (*domain.PullRequest, error) {
 	ctx := context.Background()
-	exists, err := checkUserExist(ctx, r.db, oldRevID)
-	if err != nil {
-		r.log.Debugf("failed to check exist %v", err)
-		return nil, err
-	}
-	if !exists {
-		r.log.Debugf("user with id: %s dosn't exist", oldRevID)
-		err = myErrors.ErrorResponse{
-			Code:    "NOT_FOUND",
-			Message: fmt.Sprintf("user with id: %s doesn't exists", oldRevID)}
-		return nil, err
-	}
-
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		r.log.Debugf("failed to start transaction: %v", err)
@@ -186,11 +152,6 @@ func (r *pullRequestRepo) Reassign(id string, oldRevID string) (*domain.PullRequ
 	}
 
 	cnt, err := r.countReviewrs(ctx, pr)
-	if err != nil {
-		return nil, err
-	}
-
-	err = r.RemoveReviewer(id, oldRevID)
 	if err != nil {
 		return nil, err
 	}
@@ -217,6 +178,10 @@ func (r *pullRequestRepo) Reassign(id string, oldRevID string) (*domain.PullRequ
 					_, err = r.db.ExecContext(ctx, query, newRevID, id)
 					if err != nil {
 						r.log.Debugf("failed to exec query: %v", err)
+						return nil, err
+					}
+					err = r.RemoveReviewer(id, oldRevID)
+					if err != nil {
 						return nil, err
 					}
 					break
@@ -256,17 +221,14 @@ func (r *pullRequestRepo) RemoveReviewer(id string, revID string) error {
 
 func (r *pullRequestRepo) GetByID(id string) (*domain.PullRequest, error) {
 	ctx := context.Background()
-	exists, err := r.checkPRExist(ctx, id)
+	exists, err := r.CheckPRExist(id)
 	if err != nil {
 		r.log.Debugf("failed to check exist %v", err)
 		return nil, err
 	}
 	if !exists {
 		r.log.Debugf("PR with id: %s dosn't exist", id)
-		err = myErrors.ErrorResponse{
-			Code:    "NOT_FOUND",
-			Message: fmt.Sprintf("PR with id: %s doesn't exists", id)}
-		return nil, err
+		return nil, myErrors.ErrNotFound
 	}
 
 	query := `
@@ -328,7 +290,8 @@ func (r *pullRequestRepo) getRandomUserID(ctx context.Context) (string, error) {
 	return id, nil
 }
 
-func (r *pullRequestRepo) checkPRExist(ctx context.Context, id string) (bool, error) {
+func (r *pullRequestRepo) CheckPRExist(id string) (bool, error) {
+	ctx := context.Background()
 	var exists bool
 	query := `
 		SELECT EXISTS(SELECT 1 FROM pull_requests 
