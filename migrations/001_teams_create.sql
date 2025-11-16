@@ -3,5 +3,5 @@ CREATE TABLE IF NOT EXISTS teams (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_teams_name ON teams(name);
+CREATE INDEX IF NOT EXISTS idx_teams_name ON teams(name);
 

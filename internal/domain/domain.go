@@ -4,9 +4,9 @@ import "time"
 
 type PullRequest struct {
 	PullRequestShort
-	AssignedReviewers []string  `json:"assigned_reviewers"`
-	CreatedAt         time.Time `json:"createdAt"`
-	MergedAt          time.Time `json:"mergedAt"`
+	AssignedReviewers []string   `json:"assigned_reviewers"`
+	CreatedAt         *time.Time `json:"createdAt"`
+	MergedAt          *time.Time `json:"mergedAt"`
 }
 
 type PullRequestShort struct {
@@ -18,7 +18,7 @@ type PullRequestShort struct {
 
 type Team struct {
 	Name    string    `json:"team_name"`
-	Members []*Member `json:"team_members"`
+	Members []*Member `json:"members"`
 }
 type User struct {
 	Member

@@ -8,6 +8,6 @@ CREATE TABLE IF NOT EXISTS users (
     REFERENCES teams(name) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_users_id ON users(id);
-CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_id ON users(id);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 

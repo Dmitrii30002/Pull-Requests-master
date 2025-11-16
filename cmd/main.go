@@ -1,14 +1,23 @@
 package main
 
 import (
+	"Pull-Requests-master/internal/handlers"
 	"Pull-Requests-master/internal/migration"
 	"Pull-Requests-master/package/config"
 	"Pull-Requests-master/package/database"
 	"Pull-Requests-master/package/logger"
 	"fmt"
+
+	"github.com/labstack/echo/v4"
 )
 
 func main() {
+
+	//Временное
+	/*err := setEnv()
+	if err != nil {
+		fmt.Printf("failed to set env: %v", err)
+	}*/
 
 	config, err := config.GetConfig()
 	if err != nil {
@@ -21,15 +30,14 @@ func main() {
 		fmt.Printf("logger wasn't created %v", err)
 		return
 	}
+	log.Info("logger was created")
 
 	db, err := database.New(config)
 	if err != nil {
 		fmt.Printf("data base wasn't created %v", err)
 		return
 	}
-
-	fmt.Println(db, log)
-	fmt.Print("Hallo world")
+	log.Info("data base was connected")
 
 	err = migration.Migrate(db, "migrations")
 	if err != nil {
@@ -37,18 +45,42 @@ func main() {
 	}
 	log.Info("migration completed")
 
-	//TODO 4.2: Расписать ошибки
-	//TODO 4.3: Отредачить репозитории
+	handler := handlers.NewHandler(db, log)
+	e := echo.New()
 
-	//TODO 5: Реализация хендлеров
+	teams := e.Group("/team")
+	{
+		teams.POST("/add", handler.AddTeam)
+		teams.GET("/get", handler.GetTeam)
+	}
+
+	users := e.Group("/users")
+	{
+		users.POST("/setIsActive", handler.SetUserActive)
+		users.GET("/getReview", handler.GetUserReview)
+	}
+
+	pullRequests := e.Group("/pullRequest")
+	{
+		pullRequests.POST("/create", handler.CreatePR)
+		pullRequests.POST("/merge", handler.MergePR)
+		pullRequests.POST("/reassign", handler.ReassignReviewersPR)
+	}
+	e.Start(":8080")
 
 	//TODO 6: Докер образ + докер композе +
 
 	//TODO 7: Юнит тесты + моки
 
-	//TODO 8: Нагрузочное тестирование
-
-	//TODO 9: Интеграционные тесты
-
-	//TODO 10: Допы
+	//TODO 10: Допы - под сомнением
 }
+
+/*func setEnv() error {
+	err := os.Setenv("DB_HOST", "localhost")
+	err = os.Setenv("DB_PORT", "5432")
+	err = os.Setenv("DB_NAME", "postgres")
+	err = os.Setenv("DB_USER", "postgres")
+	err = os.Setenv("DB_PASSWORD", "dima15")
+	err = os.Setenv("DB_SSLMODE", "disable")
+	return err
+}*/

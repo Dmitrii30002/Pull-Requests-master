@@ -42,7 +42,7 @@ func GetConfig() (*Config, error) {
 	config.DB.Name = os.Getenv("DB_NAME")
 	config.DB.User = os.Getenv("DB_USER")
 	config.DB.Password = os.Getenv("DB_PASSWORD")
-	config.DB.User = os.Getenv("DB_SSLMODE")
+	config.DB.SSLMode = os.Getenv("DB_SSLMODE")
 
 	return config, nil
 }

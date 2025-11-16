@@ -33,7 +33,7 @@ func (r *userRepo) CheckExist(id string) (bool, error) {
 	`
 	err := r.db.QueryRowContext(ctx, query, id).Scan(&exists)
 	if err != nil {
-		r.log.Debugf("failed to exec query: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return false, err
 	}
 	return exists, nil
@@ -51,7 +51,7 @@ func (r *userRepo) Create(user *domain.User) (*domain.User, error) {
 		user.ID, user.Username, user.IsActive, user.TeamName,
 	).Scan(&newUser.ID, &newUser.Username, &newUser.IsActive, &newUser.TeamName)
 	if err != nil {
-		r.log.Debugf("failed to exec query: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err
 	}
 
@@ -74,7 +74,7 @@ func (r *userRepo) Update(user *domain.User) (*domain.User, error) {
 		user.Username, user.IsActive, user.TeamName, user.ID,
 	)
 	if err != nil {
-		r.log.Debugf("failed to insert user %v", err)
+		r.log.Errorf("failed to exec queryr %v", err)
 		return nil, err
 	}
 
@@ -86,14 +86,14 @@ func (r *userRepo) SetUserActive(id string, status bool) (*domain.User, error) {
 	query := `
 		UPDATE users
 		SET
-			is_active = $1
-		WHERE id = $2
+			is_active = $2
+		WHERE id = $1
 		RETURNING id, username, is_active, team_name
 	`
 	var user domain.User
 	err := r.db.QueryRowContext(ctx, query, id, status).Scan(&user.ID, &user.Username, &user.IsActive, &user.TeamName)
 	if err != nil {
-		r.log.Debugf("failed set status: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err
 	}
 	return &user, nil
@@ -110,7 +110,7 @@ func (r *userRepo) GetReview(id string) ([]*domain.PullRequestShort, error) {
 
 	rows, err := r.db.QueryContext(ctx, query, id)
 	if err != nil {
-		r.log.Debugf("failed query: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -120,7 +120,7 @@ func (r *userRepo) GetReview(id string) ([]*domain.PullRequestShort, error) {
 		var pr domain.PullRequestShort
 		err := rows.Scan(&pr.ID, &pr.Name, &pr.AuthorID, &pr.Status)
 		if err != nil {
-			r.log.Debugf("failed scan: %v", err)
+			r.log.Errorf("failed scan: %v", err)
 			return nil, err
 		}
 		pullRequests = append(pullRequests, &pr)

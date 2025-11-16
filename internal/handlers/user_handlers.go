@@ -1,65 +1,73 @@
 package handlers
 
 import (
-	"Pull-Requests-master/internal/domain"
-	"Pull-Requests-master/internal/repository"
-	"Pull-Requests-master/package/logger"
-	"database/sql"
+	"Pull-Requests-master/internal/errors"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 )
 
-/*
+func (h *Handler) SetUserActive(c echo.Context) error {
+	var req struct {
+		UserID   string `json:"user_id"`
+		IsActive bool   `json:"is_active"`
+	}
+	err := c.Bind(&req)
+	if err != nil {
+		h.log.Debugf("failed to pars json: %v", err)
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": map[string]string{
+				"code":    "BAD_REQUEST",
+				"message": "Invalid JSON",
+			},
+		})
+	}
 
+	user, err := h.s.SetUserActive(req.UserID, req.IsActive)
+	if err != nil {
+		switch err {
+		case errors.ErrNotFound:
+			h.log.Debugf("user with id: %s nott found", req.UserID)
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": errors.ErrNotFound,
+			})
+		default:
+			h.log.Debugf("failed to set user active: %v", err)
+			return c.JSON(http.StatusInternalServerError, err)
+		}
+	}
 
-
-	Обработка ошибок
-
-
-*/
-
-var (
-	userRepo repository.UserRepository
-	teamRepo repository.TeamRepository
-	prRepo   repository.PullRequestRepository
-)
-
-func SetService(db *sql.DB, log *logger.Logger) {
-	userRepo = repository.NewUserRepository(db, log)
-	teamRepo = repository.NewTeamRepository(db, log)
-	prRepo = repository.NewPullRequestRepository(db, log)
+	return c.JSON(http.StatusOK, user)
 }
 
-func AddTeam(c echo.Context) error {
-	var team domain.Team
-	if err := c.Bind(&team); err != nil {
-		return c.String(http.StatusBadRequest, "team is uncorrected")
+func (h *Handler) GetUserReview(c echo.Context) error {
+	userID := c.QueryParam("user_id")
+	if userID == "" {
+		h.log.Debugf("not correct user id")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": map[string]string{
+				"code":    "BAD_REQUEST",
+				"message": "not correct user id",
+			},
+		})
 	}
 
-	newTeam, err := teamRepo.Create(&team)
+	reviews, err := h.s.GetUserReviews(userID)
 	if err != nil {
-		//Обработка ошибок
-		c.Error(err)
-		return err
+		switch err {
+		case errors.ErrNotFound:
+			h.log.Debugf("user with id: %s nott found", userID)
+			return c.JSON(http.StatusNotFound, map[string]interface{}{
+				"error": errors.ErrNotFound,
+			})
+		default:
+			h.log.Debugf("failed to get user reviews: %v", err)
+			return c.JSON(http.StatusInternalServerError, err)
+		}
 	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
-		"message": "Команда создана",
-		"team":    newTeam,
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"user_id":       userID,
+		"pull_requests": reviews,
 	})
-}
-
-func GetTeam(c echo.Context) error {
-	teamName := c.Param("team_name")
-	if teamName == "" {
-		return c.String(http.StatusBadRequest, "team name is empty")
-	}
-
-	team, err := teamRepo.GetByName(teamName)
-	if err != nil {
-		return err
-	}
-
-	return c.JSON(http.StatusOK, team)
 }

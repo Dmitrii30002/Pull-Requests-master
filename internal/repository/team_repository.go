@@ -26,22 +26,24 @@ func NewTeamRepository(db *sql.DB, log *logger.Logger) TeamRepository {
 func (r *teamRepo) Create(team *domain.Team) (*domain.Team, error) {
 	ctx := context.Background()
 	query := `
-		INSERT INTO teams (id)
+		INSERT INTO teams (name)
 		VALUES ($1)
+		RETURNING name
 	`
-	_, err := r.db.ExecContext(ctx, query, team.Name)
+	var newTeam domain.Team
+	err := r.db.QueryRowContext(ctx, query, team.Name).Scan(&newTeam.Name)
 	if err != nil {
-		r.log.Debugf("failed to insert exist %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err
 	}
 
-	return team, nil
+	return &newTeam, nil
 }
 
 func (r *teamRepo) GetByName(teamName string) (*domain.Team, error) {
 	ctx := context.Background()
 	query := `
-		SELECT u.id, u.username, u.status
+		SELECT u.id, u.username, u.is_active
 		FROM teams t
 		JOIN users u ON t.name = u.team_name
 		WHERE t.name = $1
@@ -53,7 +55,7 @@ func (r *teamRepo) GetByName(teamName string) (*domain.Team, error) {
 	}
 	rows, err := r.db.QueryContext(ctx, query, teamName)
 	if err != nil {
-		return nil, fmt.Errorf("failed query: %v", err)
+		return nil, fmt.Errorf("failed to exec query: %v", err)
 	}
 	defer rows.Close()
 
@@ -78,7 +80,7 @@ func (r *teamRepo) CheckExist(teamName string) (bool, error) {
 	`
 	err := r.db.QueryRowContext(ctx, query, teamName).Scan(&exists)
 	if err != nil {
-		r.log.Debugf("failed to check exist %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return exists, err
 	}
 	return exists, nil

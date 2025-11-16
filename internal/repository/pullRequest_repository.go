@@ -2,7 +2,6 @@ package repository
 
 import (
 	"Pull-Requests-master/internal/domain"
-	myErrors "Pull-Requests-master/internal/errors"
 	"Pull-Requests-master/package/logger"
 	"context"
 	"database/sql"
@@ -29,25 +28,15 @@ func NewPullRequestRepository(db *sql.DB, log *logger.Logger) PullRequestReposit
 
 func (r *pullRequestRepo) Create(pr *domain.PullRequestShort) (*domain.PullRequest, error) {
 	ctx := context.Background()
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
-	if err != nil {
-		r.log.Debugf("failed to start transaction: %v", err)
-		return nil, err
-	}
-	defer tx.Rollback()
 	query := `
-		dada
-	`
-
-	query = `
 		INSERT INTO pull_requests (id, name, author_id, status)
 		VALUES ($1, $2, $3, $4)
-		RETURNING (id, name, author_id, status, created_at)
+		RETURNING id, name, author_id, status, created_at
 	`
 	newPR := domain.PullRequest{AssignedReviewers: []string{}}
-	err = r.db.QueryRowContext(ctx, query, pr.ID, pr.Name, pr.AuthorID, pr.Status).Scan(&newPR.ID, &newPR.Name, &newPR.AuthorID, &newPR.Status, &newPR.CreatedAt)
+	err := r.db.QueryRowContext(ctx, query, pr.ID, pr.Name, pr.AuthorID, pr.Status).Scan(&newPR.ID, &newPR.Name, &newPR.AuthorID, &newPR.Status, &newPR.CreatedAt)
 	if err != nil {
-		r.log.Debugf("failed to exec query: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err
 	}
 
@@ -59,11 +48,11 @@ func (r *pullRequestRepo) Create(pr *domain.PullRequestShort) (*domain.PullReque
 			SELECT team_name
 			FROM users
 			WHERE id = $1
-		) AND status = TRUE
+		) AND is_active = TRUE
 	`
 	err = r.db.QueryRowContext(ctx, query, newPR.AuthorID).Scan(&cnt)
 	if err != nil {
-		r.log.Debugf("failed to exec query: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err
 	}
 	if cnt > 1 {
@@ -74,17 +63,18 @@ func (r *pullRequestRepo) Create(pr *domain.PullRequestShort) (*domain.PullReque
 		for true {
 			id, err := r.getRandomUserID(ctx)
 			if err != nil {
+				r.log.Errorf("failed to get random user id: %v", err)
 				return nil, err
 			}
 			query = `
-				INSERT INSTO pr_reviewrs (user_id, pr_id)
+				INSERT INTO pr_reviewrs (user_id, pr_id)
 				VALUES ($1, $2)
 			`
 			if id != newPR.AuthorID && len(newPR.AssignedReviewers) == 0 {
 				newPR.AssignedReviewers = append(newPR.AssignedReviewers, id)
 				_, err = r.db.ExecContext(ctx, query, id, newPR.ID)
 				if err != nil {
-					r.log.Debugf("failed to exec query: %v", err)
+					r.log.Errorf("failed to exec query: %v", err)
 					return nil, err
 				}
 			} else {
@@ -92,7 +82,7 @@ func (r *pullRequestRepo) Create(pr *domain.PullRequestShort) (*domain.PullReque
 					newPR.AssignedReviewers = append(newPR.AssignedReviewers, id)
 					_, err = r.db.ExecContext(ctx, query, id, newPR.ID)
 					if err != nil {
-						r.log.Debugf("failed to exec query: %v", err)
+						r.log.Errorf("failed to exec query: %v", err)
 						return nil, err
 					}
 				}
@@ -101,12 +91,6 @@ func (r *pullRequestRepo) Create(pr *domain.PullRequestShort) (*domain.PullReque
 				break
 			}
 		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		r.log.Debugf("transaction wasn't commited: %v", err)
-		return nil, err
 	}
 
 	return &newPR, nil
@@ -118,14 +102,14 @@ func (r *pullRequestRepo) Merge(id string) (*domain.PullRequest, error) {
 		UPDATE pull_requests
 		SET
 			status = 'MERGED',
-			merged_at: 'CURRENT_TIMESTAMP'
+			merged_at = CURRENT_TIMESTAMP
 		WHERE id = $1
-		RETURNING (id, name, author_id, status, merged_at)
+		RETURNING id, name, author_id, status, created_at, merged_at
 	`
-	newPR := domain.PullRequest{AssignedReviewers: []string{}}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&newPR.ID, &newPR.Name, &newPR.AuthorID, &newPR.Status, &newPR.MergedAt)
+	newPR := domain.PullRequest{}
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&newPR.ID, &newPR.Name, &newPR.AuthorID, &newPR.Status, &newPR.CreatedAt, &newPR.MergedAt)
 	if err != nil {
-		r.log.Debugf("failed to exec query: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err
 	}
 
@@ -134,25 +118,21 @@ func (r *pullRequestRepo) Merge(id string) (*domain.PullRequest, error) {
 
 func (r *pullRequestRepo) Reassign(id string, oldRevID string) (*domain.PullRequest, error) {
 	ctx := context.Background()
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
-	if err != nil {
-		r.log.Debugf("failed to start transaction: %v", err)
-		return nil, err
-	}
-	defer tx.Rollback()
-
 	pr, err := r.GetByID(id)
 	if err != nil {
+		r.log.Errorf("failed to get pr by id: %v", err)
 		return nil, err
 	}
 
 	usersID, err := r.GetReviewrs(id)
 	if err != nil {
+		r.log.Errorf("failed to get reviewers: %v", err)
 		return nil, err
 	}
 
 	cnt, err := r.countReviewrs(ctx, pr)
 	if err != nil {
+		r.log.Errorf("failed to count reviewers: %v", err)
 		return nil, err
 	}
 
@@ -160,10 +140,11 @@ func (r *pullRequestRepo) Reassign(id string, oldRevID string) (*domain.PullRequ
 		for true {
 			newRevID, err := r.getRandomUserID(ctx)
 			if err != nil {
+				r.log.Errorf("failed to get random user id: %v", err)
 				return nil, err
 			}
 			query := `
-				INSERT INSTO pr_reviewrs (user_id, pr_id)
+				INSERT INTO pr_reviewrs (user_id, pr_id)
 				VALUES ($1, $2)
 			`
 			if newRevID != pr.AuthorID {
@@ -177,11 +158,12 @@ func (r *pullRequestRepo) Reassign(id string, oldRevID string) (*domain.PullRequ
 				if flag {
 					_, err = r.db.ExecContext(ctx, query, newRevID, id)
 					if err != nil {
-						r.log.Debugf("failed to exec query: %v", err)
+						r.log.Errorf("failed to exec query: %v", err)
 						return nil, err
 					}
 					err = r.RemoveReviewer(id, oldRevID)
 					if err != nil {
+						r.log.Errorf("failed to remove reviewer: %v", err)
 						return nil, err
 					}
 					break
@@ -196,12 +178,6 @@ func (r *pullRequestRepo) Reassign(id string, oldRevID string) (*domain.PullRequ
 	}
 	pr.AssignedReviewers = usersID
 
-	err = tx.Commit()
-	if err != nil {
-		r.log.Debugf("transaction wasn't commited: %v", err)
-		return nil, err
-	}
-
 	return pr, nil
 }
 
@@ -213,6 +189,7 @@ func (r *pullRequestRepo) RemoveReviewer(id string, revID string) error {
 	`
 	_, err := r.db.ExecContext(ctx, query, id, revID)
 	if err != nil {
+		r.log.Errorf("failed to exec query: %v", err)
 		return err
 	}
 
@@ -221,25 +198,21 @@ func (r *pullRequestRepo) RemoveReviewer(id string, revID string) error {
 
 func (r *pullRequestRepo) GetByID(id string) (*domain.PullRequest, error) {
 	ctx := context.Background()
-	exists, err := r.CheckPRExist(id)
-	if err != nil {
-		r.log.Debugf("failed to check exist %v", err)
-		return nil, err
-	}
-	if !exists {
-		r.log.Debugf("PR with id: %s dosn't exist", id)
-		return nil, myErrors.ErrNotFound
-	}
-
 	query := `
-		SELECT id, name, author_id, status
+		SELECT id, name, author_id, status, created_at, merged_at
 		FROM pull_requests
 		WHERE id = $1
 	`
 	newPR := domain.PullRequest{AssignedReviewers: []string{}}
-	err = r.db.QueryRowContext(ctx, query, id).Scan(&newPR.ID, &newPR.Name, &newPR.AuthorID, &newPR.Status, &newPR.MergedAt)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&newPR.ID, &newPR.Name, &newPR.AuthorID, &newPR.Status, &newPR.CreatedAt, &newPR.MergedAt)
 	if err != nil {
-		r.log.Debugf("failed to exec query: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
+		return nil, err
+	}
+
+	newPR.AssignedReviewers, err = r.GetReviewrs(id)
+	if err != nil {
+		r.log.Errorf("failed to get reviewers: %v", err)
 		return nil, err
 	}
 
@@ -251,11 +224,12 @@ func (r *pullRequestRepo) GetReviewrs(id string) ([]string, error) {
 	query := `
 		SELECT user_id
 		FROM pr_reviewrs
-		WHERE pr_id = $1 AND status = TRUE
+		WHERE pr_id = $1
 	`
 	var usersID []string
 	rows, err := r.db.QueryContext(ctx, query, id)
 	if err != nil {
+		r.log.Errorf("failed to exec query: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -263,6 +237,7 @@ func (r *pullRequestRepo) GetReviewrs(id string) ([]string, error) {
 		var userID string
 		err := rows.Scan(&userID)
 		if err != nil {
+			r.log.Errorf("failed to scan user_id: %v", err)
 			return nil, err
 		}
 		usersID = append(usersID, userID)
@@ -273,7 +248,7 @@ func (r *pullRequestRepo) GetReviewrs(id string) ([]string, error) {
 
 func (r *pullRequestRepo) getRandomUserID(ctx context.Context) (string, error) {
 	query := `
-        SELECT id, name, email 
+        SELECT id
         FROM users
 		WHERE is_active = true 
         ORDER BY RANDOM() 
@@ -283,7 +258,7 @@ func (r *pullRequestRepo) getRandomUserID(ctx context.Context) (string, error) {
 	var id string
 	err := r.db.QueryRowContext(ctx, query).Scan(&id)
 	if err != nil {
-		r.log.Debugf("failed to get random user: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return "", err
 	}
 
@@ -299,7 +274,7 @@ func (r *pullRequestRepo) CheckPRExist(id string) (bool, error) {
 	`
 	err := r.db.QueryRowContext(ctx, query, id).Scan(&exists)
 	if err != nil {
-		r.log.Debugf("failed to check exist %v", err)
+		r.log.Errorf("failed to check exist %v", err)
 		return exists, err
 	}
 	return exists, nil
@@ -314,11 +289,11 @@ func (r *pullRequestRepo) countReviewrs(ctx context.Context, rp *domain.PullRequ
 			SELECT team_name
 			FROM users
 			WHERE id = $1
-		) AND status = TRUE
+		) AND is_active = TRUE
 	`
 	err := r.db.QueryRowContext(ctx, query, rp.AuthorID).Scan(&cnt)
 	if err != nil {
-		r.log.Debugf("failed to exec query: %v", err)
+		r.log.Errorf("failed to exec query: %v", err)
 		return 0, err
 	}
 
